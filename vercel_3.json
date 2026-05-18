@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/cuivan-presupuestos.html" },
+    { "source": "/(.*)", "destination": "/cuivan-presupuestos.html" }
+  ]
+}

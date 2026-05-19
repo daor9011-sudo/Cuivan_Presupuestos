@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>CUIVAN – Seguimiento de Presupuestos</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.11.1/lib/msal-browser.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f4f6f8;--bg2:#ffffff;--bg3:#f0f2f5;--bg4:#e8ecf0;--card:#ffffff;
+  --teal:#009e8e;--teal2:#007a6e;--teal3:#00c9b1;
+  --teal-dim:rgba(0,158,142,0.10);--teal-dim2:rgba(0,158,142,0.06);
+  --border:rgba(0,158,142,0.20);--border2:rgba(0,0,0,0.08);
+  --txt:#1a2733;--txt2:#4a6070;--txt3:#8fa4b4;
+  --green:#16a34a;--green-dim:rgba(22,163,74,0.10);
+  --yellow:#d97706;--yellow-dim:rgba(217,119,6,0.10);
+  --red:#dc2626;--red-dim:rgba(220,38,38,0.10);
+  --font:'DM Sans',sans-serif;--fontb:'Space Grotesk',sans-serif;
+}
+body{background:var(--bg);color:var(--txt);font-family:var(--font);min-height:100vh;font-size:14px;line-height:1.6}
+
+/* SYNC STATUS */
+.sync-bar{display:flex;align-items:center;gap:8px;padding:6px 24px;background:var(--bg2);border-bottom:1px solid var(--border2);font-size:12px;color:var(--txt3)}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:var(--txt3);flex-shrink:0;transition:background 0.3s}
+.sync-dot.ok{background:var(--green)}.sync-dot.syncing{background:var(--yellow);animation:pulse 1s infinite}
+.sync-dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.sync-user{margin-left:auto;color:var(--teal);font-weight:500;cursor:pointer}
+.sync-user:hover{text-decoration:underline}
+
+.header{background:var(--bg2);border-bottom:1px solid var(--border2);box-shadow:0 1px 4px rgba(0,0,0,0.06);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:64px;position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:14px}
+.header-right{display:flex;align-items:center;gap:8px}
+.btn-icon{background:none;border:1px solid var(--border2);color:var(--txt2);padding:7px 12px;border-radius:8px;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:500;display:flex;align-items:center;gap:6px;transition:all 0.2s;touch-action:manipulation}
+.btn-icon:hover{border-color:var(--teal);color:var(--teal)}
+.btn-icon-label{font-size:12px}
+.btn-new{background:var(--teal);color:#fff;border:none;padding:8px 16px;border-radius:8px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px;touch-action:manipulation}
+.btn-new:hover{background:var(--teal2)}
+.tabs{background:var(--bg2);border-bottom:1px solid var(--border2);padding:0 24px;display:flex}
+.tab{padding:14px 20px;font-size:13px;font-weight:500;color:var(--txt3);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.tab.active{color:var(--teal);border-bottom-color:var(--teal)}
+.main{padding:24px;max-width:1200px;margin:0 auto}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.metric-card{background:var(--card);border:1px solid var(--border2);box-shadow:0 1px 3px rgba(0,0,0,0.05);border-radius:12px;padding:16px 20px;position:relative;overflow:hidden}
+.metric-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--teal);opacity:0.4}
+.metric-card.green::before{background:var(--green)}.metric-card.yellow::before{background:var(--yellow)}.metric-card.red::before{background:var(--red)}
+.metric-label{font-size:11px;color:var(--txt2);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;font-weight:700;font-family:var(--fontb)}
+.metric-val{font-family:var(--fontb);font-size:28px;font-weight:700;color:var(--txt);line-height:1}
+.metric-sub{font-size:11px;color:var(--txt3);margin-top:4px}
+.sem-bars{display:flex;height:6px;border-radius:4px;overflow:hidden;gap:2px;margin-top:6px}
+.sem-bar{height:100%;border-radius:2px}.sem-bar.verde{background:var(--green)}.sem-bar.amarillo{background:var(--yellow)}.sem-bar.rojo{background:var(--red)}
+.filter-section{background:var(--card);border:1px solid var(--border2);border-radius:12px;padding:16px 20px;margin-bottom:16px}
+.filter-row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.filter-group{display:flex;flex-direction:column;gap:6px}
+.filter-label{font-size:11px;color:var(--txt3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
+.filter-chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--bg3);border:1.5px solid var(--border2);color:var(--txt2);padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;transition:all 0.18s;display:flex;align-items:center;gap:5px;font-family:var(--font);touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.chip.active{border-width:2px}
+.chip.all.active{border-color:var(--teal);color:var(--teal);background:var(--teal-dim2)}
+.chip.verde.active{border-color:var(--green);color:var(--green);background:var(--green-dim)}
+.chip.amarillo.active{border-color:var(--yellow);color:var(--yellow);background:var(--yellow-dim)}
+.chip.rojo.active{border-color:var(--red);color:var(--red);background:var(--red-dim)}
+.chip-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
+.filter-select{background:var(--bg3);border:1.5px solid var(--border2);color:var(--txt);padding:6px 10px;border-radius:8px;font-family:var(--font);font-size:12px;outline:none;cursor:pointer}
+.filter-select:focus{border-color:var(--teal)}
+.search-input{background:var(--bg3);border:1.5px solid var(--border2);color:var(--txt);padding:6px 12px;border-radius:8px;font-family:var(--font);font-size:13px;outline:none;width:200px}
+.search-input:focus{border-color:var(--teal)}
+.search-input::placeholder{color:var(--txt3);opacity:0.6}
+.filter-clear{background:none;border:none;color:var(--txt3);font-size:12px;cursor:pointer;padding:4px 8px;border-radius:6px;font-family:var(--font);touch-action:manipulation}
+.filter-clear:hover{color:var(--red)}
+.table-wrap{background:var(--card);border:1px solid var(--border2);box-shadow:0 1px 3px rgba(0,0,0,0.05);border-radius:12px;overflow:hidden}
+.table-header{display:grid;grid-template-columns:36px 1fr 140px 120px 130px 110px 100px;padding:12px 16px;background:var(--bg3);border-bottom:1px solid var(--border2);gap:8px}
+.th-cell{font-size:11px;color:var(--txt3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
+.table-row{display:grid;grid-template-columns:36px 1fr 140px 120px 130px 110px 100px;padding:14px 16px;border-bottom:1px solid var(--border2);gap:8px;align-items:center;cursor:pointer;transition:background 0.15s;touch-action:manipulation}
+.table-row:last-child{border-bottom:none}
+.table-row:hover{background:var(--bg3)}
+.status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.status-dot.verde{background:var(--green);box-shadow:0 0 5px rgba(22,163,74,0.4)}
+.status-dot.amarillo{background:var(--yellow);box-shadow:0 0 5px rgba(217,119,6,0.4)}
+.status-dot.rojo{background:var(--red);box-shadow:0 0 5px rgba(220,38,38,0.4)}
+.patient-name{font-weight:500;color:var(--txt);font-size:13px}
+.patient-proc{font-size:11px;color:var(--txt3);margin-top:2px}
+.cell-txt{font-size:13px;color:var(--txt2)}
+.cell-monto{font-family:var(--fontb);font-size:13px;color:var(--txt);font-weight:500}
+.cell-actions{display:flex;gap:4px}
+.act-btn{background:none;border:1px solid var(--border2);color:var(--txt3);padding:4px 8px;border-radius:6px;cursor:pointer;font-size:11px;transition:all 0.15s;font-family:var(--font);touch-action:manipulation}
+.act-btn:hover{border-color:var(--teal);color:var(--teal)}
+.act-btn.del:hover{border-color:var(--red);color:var(--red);background:var(--red-dim)}
+.results-count{font-size:12px;color:var(--txt3);padding:8px 16px;background:var(--bg3);border-bottom:1px solid var(--border2)}
+.overlay{position:fixed;inset:0;background:rgba(26,39,51,0.55);z-index:200;display:none;align-items:center;justify-content:center;padding:24px;-webkit-overflow-scrolling:touch}
+.overlay.active{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;animation:slideUp 0.22s ease;position:relative;z-index:201}
+.detail-modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:700px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;animation:slideUp 0.22s ease;position:relative;z-index:201}
+@keyframes slideUp{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-header{padding:20px 24px;border-bottom:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-family:var(--fontb);font-size:16px;font-weight:600;color:var(--txt)}
+.modal-close{background:none;border:none;color:var(--txt3);cursor:pointer;font-size:20px;padding:4px 8px;line-height:1;touch-action:manipulation;border-radius:6px}
+.modal-close:hover{color:var(--txt);background:var(--bg3)}
+.modal-body{padding:24px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border2);display:flex;justify-content:flex-end;gap:8px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-grid.full{grid-template-columns:1fr}
+.form-grid.three{grid-template-columns:1fr 1fr 1fr}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11px;color:var(--txt3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
+.field input,.field select,.field textarea{background:var(--bg3);border:1.5px solid var(--border2);color:var(--txt);padding:9px 12px;border-radius:8px;font-family:var(--font);font-size:13px;outline:none;transition:border 0.2s;width:100%}
+.field input::placeholder,.field textarea::placeholder{color:var(--txt3);opacity:0.5;font-style:italic;font-size:12px}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--teal)}
+.field select option{background:var(--bg2)}
+.field textarea{resize:vertical;min-height:68px}
+.section-title{font-size:11px;color:var(--txt3);text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border2)}
+.section-gap{margin-top:18px}
+.opcion-block{background:var(--bg3);border:1.5px solid var(--border2);border-radius:10px;padding:14px;margin-bottom:10px}
+.opcion-title{font-size:12px;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px}
+.substatus-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.ss-opt{border:1.5px solid var(--border2);border-radius:10px;padding:9px 10px;cursor:pointer;transition:all 0.18s;display:flex;align-items:flex-start;gap:7px;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.ss-opt:hover{border-color:var(--border);background:var(--bg3)}
+.ss-opt.selected.amarillo{border-color:var(--yellow);background:var(--yellow-dim);border-width:2px}
+.ss-opt.selected.verde{border-color:var(--green);background:var(--green-dim);border-width:2px}
+.ss-opt.selected.rojo{border-color:var(--red);background:var(--red-dim);border-width:2px}
+.ss-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.ss-dot.verde{background:var(--green)}.ss-dot.amarillo{background:var(--yellow)}.ss-dot.rojo{background:var(--red)}
+.ss-label{font-size:12px;font-weight:600;color:var(--txt);line-height:1.3}
+.ss-opt.selected.amarillo .ss-label{color:var(--yellow)}
+.ss-opt.selected.verde .ss-label{color:var(--green)}
+.ss-opt.selected.rojo .ss-label{color:var(--red)}
+.sem-derived{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:10px;margin-top:10px;font-size:13px;font-weight:500}
+.sem-derived.verde{background:var(--green-dim);color:var(--green);border:1.5px solid rgba(22,163,74,0.25)}
+.sem-derived.amarillo{background:var(--yellow-dim);color:var(--yellow);border:1.5px solid rgba(217,119,6,0.25)}
+.sem-derived.rojo{background:var(--red-dim);color:var(--red);border:1.5px solid rgba(220,38,38,0.25)}
+.sem-dot-lg{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.detail-top{padding:22px 24px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border2)}
+.detail-name{font-family:var(--fontb);font-size:20px;font-weight:700;color:var(--txt);margin-bottom:3px}
+.detail-proc{font-size:13px;color:var(--txt2);margin-bottom:10px}
+.detail-meta{display:flex;flex-wrap:wrap;gap:6px}
+.meta-chip{background:var(--bg3);border:1px solid var(--border2);color:var(--txt2);padding:3px 10px;border-radius:14px;font-size:12px}
+.detail-monto{font-family:var(--fontb);font-size:22px;font-weight:700;color:var(--teal)}
+.detail-tabs{display:flex;padding:0 24px;border-bottom:1px solid var(--border2)}
+.detail-tab{padding:10px 16px;font-size:13px;color:var(--txt3);cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.detail-tab.active{color:var(--teal);border-bottom-color:var(--teal)}
+.detail-body{padding:22px 24px}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.info-field{display:flex;flex-direction:column;gap:3px}
+.info-label{font-size:11px;color:var(--txt3);text-transform:uppercase;letter-spacing:0.06em}
+.info-val{font-size:13px;color:var(--txt);font-weight:500}
+.notas-box{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px;font-size:13px;color:var(--txt2);line-height:1.6;margin-top:10px}
+.log-entry{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border2)}
+.log-entry:last-child{border-bottom:none}
+.log-dot{width:7px;height:7px;border-radius:50%;background:var(--teal);margin-top:5px;flex-shrink:0}
+.log-date{font-size:11px;color:var(--txt3);margin-bottom:2px}
+.log-text{font-size:13px;color:var(--txt2)}
+.log-form{margin-top:14px;display:flex;flex-direction:column;gap:7px}
+.log-form textarea{background:var(--bg3);border:1.5px solid var(--border2);color:var(--txt);padding:9px 12px;border-radius:8px;font-family:var(--font);font-size:13px;resize:vertical;min-height:56px;outline:none;width:100%}
+.log-form textarea:focus{border-color:var(--teal)}
+.btn-log{background:var(--teal-dim);border:1px solid var(--teal3);color:var(--teal);padding:6px 14px;border-radius:8px;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:500;align-self:flex-end;touch-action:manipulation}
+.detail-footer{padding:14px 24px;border-top:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between}
+.btn-delete{background:none;border:1px solid rgba(220,38,38,0.25);color:var(--red);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-family:var(--font);touch-action:manipulation}
+.btn-delete:hover{background:var(--red-dim)}
+.btn-edit{background:none;border:1px solid var(--border);color:var(--teal);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-family:var(--font);touch-action:manipulation}
+.btn-cancel{background:none;border:1px solid var(--border2);color:var(--txt2);padding:8px 16px;border-radius:8px;cursor:pointer;font-family:var(--font);font-size:13px;touch-action:manipulation}
+.btn-save{background:var(--teal);color:#fff;border:none;padding:8px 20px;border-radius:8px;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;touch-action:manipulation}
+.btn-save:hover{background:var(--teal2)}
+.pane{display:none}.pane.active{display:block}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg3)}::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+@media(max-width:640px){
+  .header{padding:0 14px;height:56px}
+  .btn-icon-label{display:none}.btn-icon{padding:7px 8px}
+  .btn-new{padding:7px 11px;font-size:12px}
+  .tabs{padding:0 14px}.tab{padding:12px 12px;font-size:12px}
+  .main{padding:14px}
+  .metrics{grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+  .metric-card{padding:12px 14px}.metric-val{font-size:22px}
+  .filter-section{padding:12px 14px}.filter-row{gap:8px}.search-input{width:100%}
+  .table-header{display:none}
+  .table-row{display:flex;flex-direction:column;padding:14px 16px;gap:0;position:relative}
+  .table-row > div:nth-child(1){position:absolute;top:16px;right:14px}
+  .table-row > div:nth-child(2){margin-bottom:6px;padding-right:20px}
+  .table-row > div:nth-child(3)::before{content:'Médico: ';color:var(--txt3);font-weight:600}
+  .table-row > div:nth-child(4)::before{content:'Monto: ';color:var(--txt3);font-weight:600}
+  .table-row > div:nth-child(5)::before{content:'Estado: ';color:var(--txt3);font-weight:600}
+  .table-row > div:nth-child(6)::before{content:'Contacto: ';color:var(--txt3);font-weight:600}
+  .table-row > div:nth-child(3),.table-row > div:nth-child(4),.table-row > div:nth-child(5),.table-row > div:nth-child(6){font-size:12px;display:flex;gap:4px;margin-bottom:2px}
+  .cell-actions{margin-top:10px;border-top:1px solid var(--border2);padding-top:10px}
+  .overlay{padding:0;align-items:flex-end}
+  .modal,.detail-modal{border-radius:20px 20px 0 0;max-height:93vh;border-bottom:none;width:100%;padding-bottom:env(safe-area-inset-bottom,12px)}
+  .form-grid,.form-grid.three{grid-template-columns:1fr}
+  .substatus-grid{grid-template-columns:1fr 1fr}
+  .info-grid{grid-template-columns:1fr}
+  .detail-footer{flex-wrap:wrap;gap:8px}
+  .sync-bar{padding:6px 14px}
+}
+</style>
+</head>
+<body>
+
+<!-- SYNC BAR -->
+<div class="sync-bar">
+  <div class="sync-dot" id="sync-dot"></div>
+  <span id="sync-msg">Desconectado</span>
+  <span class="sync-user" id="sync-user" style="display:none"></span>
+</div>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen" style="display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 40px);padding:24px">
+  <div style="background:var(--card);border:1px solid var(--border2);border-radius:20px;padding:48px 40px;max-width:420px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.08)">
+    <img src="data:image/png;base64,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" style="height:56px;width:auto;margin-bottom:24px">
+    <h2 style="font-family:var(--fontb);font-size:20px;font-weight:700;color:var(--txt);margin-bottom:8px">Seguimiento de Presupuestos</h2>
+    <p style="font-size:13px;color:var(--txt2);margin-bottom:32px;line-height:1.6">Inicia sesión con tu cuenta de Microsoft<br>para sincronizar con OneDrive.</p>
+    <button id="btn-login-main" style="background:var(--teal);color:#fff;border:none;padding:14px 32px;border-radius:10px;font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;gap:10px;transition:background 0.2s">
+      <svg width="18" height="18" viewBox="0 0 21 21" fill="none"><rect x="1" y="1" width="9" height="9" fill="#f25022"/><rect x="11" y="1" width="9" height="9" fill="#7fba00"/><rect x="1" y="11" width="9" height="9" fill="#00a4ef"/><rect x="11" y="11" width="9" height="9" fill="#ffb900"/></svg>
+      Iniciar sesión con Microsoft
+    </button>
+    <p style="font-size:11px;color:var(--txt3);margin-top:20px">CUIVAN · Salud Integral<br>Gestionado por Mediconsulting</p>
+  </div>
+</div>
+
+<!-- APP CONTENT -->
+<div id="app-content" style="display:none">
+
+<div class="header">
+  <div class="header-brand">
+    <img src="data:image/png;base64,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" style="height:48px;width:auto">
+    <div style="width:1px;height:32px;background:var(--border2)"></div>
+    <div style="font-size:11px;color:var(--txt3)">Seguimiento de <span style="color:var(--teal);font-weight:600">Presupuestos</span></div>
+  </div>
+  <div class="header-right">
+    <button class="btn-icon" id="btn-sync" title="Sincronizar"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 112.5 5M2.5 2v3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="btn-icon-label">Sync</span></button>
+    <button class="btn-icon" id="btn-export-csv"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h10M3 12h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span class="btn-icon-label">CSV</span></button>
+    <button class="btn-new" id="btn-nuevo">+ Nuevo</button>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="presupuestos">Presupuestos</div>
+  <div class="tab" data-tab="dashboard">Dashboard</div>
+</div>
+
+<div class="main">
+  <div id="pane-presupuestos" class="pane active">
+    <div class="metrics" id="metrics-row"></div>
+    <div class="filter-section">
+      <div class="filter-row">
+        <div class="filter-group">
+          <div class="filter-label">Semáforo</div>
+          <div class="filter-chips" id="chips-sem">
+            <button class="chip all active" data-sem="todos"><span class="chip-dot" style="background:var(--teal)"></span>Todos</button>
+            <button class="chip verde" data-sem="verde"><span class="chip-dot" style="background:var(--green)"></span>Verde</button>
+            <button class="chip amarillo" data-sem="amarillo"><span class="chip-dot" style="background:var(--yellow)"></span>Amarillo</button>
+            <button class="chip rojo" data-sem="rojo"><span class="chip-dot" style="background:var(--red)"></span>Rojo</button>
+          </div>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">Estado</div>
+          <select class="filter-select" id="filter-estado">
+            <option value="">Todos los estados</option>
+            <option value="seguimiento_activo">Seguimiento activo</option>
+            <option value="en_valoracion">En valoración</option>
+            <option value="aceptado_por_agendar">Aceptado – por agendar</option>
+            <option value="procedimiento_agendado">Procedimiento agendado</option>
+            <option value="pagado">Pagado</option>
+            <option value="operado">Operado</option>
+            <option value="no_aceptado">No aceptado</option>
+            <option value="sin_respuesta">Sin respuesta</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">Mes</div>
+          <select class="filter-select" id="filter-mes">
+            <option value="">Todos</option>
+            <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+            <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+            <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+            <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <div class="filter-label">Año</div>
+          <select class="filter-select" id="filter-año">
+            <option value="">Todos</option>
+            <option value="2024">2024</option><option value="2025">2025</option>
+            <option value="2026">2026</option><option value="2027">2027</option>
+          </select>
+        </div>
+        <div class="filter-group" style="margin-left:auto">
+          <div class="filter-label">Buscar</div>
+          <input class="search-input" id="search-input" placeholder="Nombre o procedimiento...">
+        </div>
+        <button class="filter-clear" id="btn-clear-filters">✕ Limpiar</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <div class="th-cell"></div>
+        <div class="th-cell">Paciente / Procedimiento</div>
+        <div class="th-cell">Médico</div>
+        <div class="th-cell">Monto</div>
+        <div class="th-cell">Estado</div>
+        <div class="th-cell">Último contacto</div>
+        <div class="th-cell">Acciones</div>
+      </div>
+      <div id="table-body"></div>
+    </div>
+  </div>
+  <div id="pane-dashboard" class="pane"><div id="dashboard-content"></div></div>
+</div>
+
+<!-- MODAL NUEVO/EDITAR -->
+<div class="overlay" id="overlay-new">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-new-title">Nuevo Presupuesto</div>
+      <button class="modal-close" id="close-new">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+      <div class="section-title">Datos del Paciente</div>
+      <div class="form-grid">
+        <div class="field"><label>Nombre completo *</label><input id="f-nombre" placeholder="Juan García López"></div>
+        <div class="field"><label>Médico tratante *</label><input id="f-medico" placeholder="Dr. Yair Muñoz Contreras"></div>
+        <div class="field" style="grid-column:1/-1"><label>Procedimiento(s) *</label><input id="f-procedimiento" placeholder="Cirugía de próstata"></div>
+        <div class="field"><label>Canal de envío</label>
+          <select id="f-canal"><option value="WhatsApp">WhatsApp</option><option value="Correo">Correo</option><option value="Físico">Físico</option><option value="WhatsApp + Correo">WhatsApp + Correo</option></select>
+        </div>
+        <div class="field"><label>Teléfono / Contacto</label><input id="f-contacto" placeholder="55 1234 5678"></div>
+        <div class="field"><label>Vigencia</label><input id="f-vigencia" type="date"></div>
+      </div>
+      <div class="section-gap">
+        <div class="section-title">Opciones del Presupuesto</div>
+        <div class="opcion-block">
+          <div class="opcion-title">Opción A</div>
+          <div class="form-grid">
+            <div class="field"><label>Nombre opción A</label><input id="f-opA-nombre" placeholder="RTUP Bipolar"></div>
+            <div class="field"><label>Tipo de anestesia</label><input id="f-opA-anestesia" placeholder="Regional"></div>
+          </div>
+          <div class="form-grid three" style="margin-top:10px">
+            <div class="field"><label>Gastos Hospital ($)</label><input id="f-opA-hospital" type="number" placeholder="0"></div>
+            <div class="field"><label>Insumos Especiales ($)</label><input id="f-opA-insumos" type="number" placeholder="0"></div>
+            <div class="field"><label>Honorarios Médicos ($)</label><input id="f-opA-honorarios" type="number" placeholder="0"></div>
+          </div>
+          <div class="form-grid" style="margin-top:10px">
+            <div class="field"><label>Hospital A</label><input id="f-opA-hospnombre" placeholder="Global Surgery..."></div>
+            <div class="field"><label>Dirección A</label><input id="f-opA-direccion" placeholder="Av. Patriotismo 579..."></div>
+          </div>
+        </div>
+        <div class="opcion-block">
+          <div class="opcion-title">Opción B <span style="font-size:10px;opacity:0.6;font-weight:400">(opcional)</span></div>
+          <div class="form-grid">
+            <div class="field"><label>Nombre opción B</label><input id="f-opB-nombre" placeholder="HoLEP"></div>
+            <div class="field"><label>Tipo de anestesia</label><input id="f-opB-anestesia" placeholder="Regional"></div>
+          </div>
+          <div class="form-grid three" style="margin-top:10px">
+            <div class="field"><label>Gastos Hospital ($)</label><input id="f-opB-hospital" type="number" placeholder="0"></div>
+            <div class="field"><label>Insumos Especiales ($)</label><input id="f-opB-insumos" type="number" placeholder="0"></div>
+            <div class="field"><label>Honorarios Médicos ($)</label><input id="f-opB-honorarios" type="number" placeholder="0"></div>
+          </div>
+          <div class="form-grid" style="margin-top:10px">
+            <div class="field"><label>Hospital B</label><input id="f-opB-hospnombre" placeholder="Global Surgery..."></div>
+            <div class="field"><label>Dirección B</label><input id="f-opB-direccion" placeholder="Av. Patriotismo 579..."></div>
+          </div>
+        </div>
+        <div class="opcion-block">
+          <div class="opcion-title">Opción C <span style="font-size:10px;opacity:0.6;font-weight:400">(opcional)</span></div>
+          <div class="form-grid">
+            <div class="field"><label>Nombre opción C</label><input id="f-opC-nombre" placeholder="Láser"></div>
+            <div class="field"><label>Tipo de anestesia</label><input id="f-opC-anestesia" placeholder="General"></div>
+          </div>
+          <div class="form-grid three" style="margin-top:10px">
+            <div class="field"><label>Gastos Hospital ($)</label><input id="f-opC-hospital" type="number" placeholder="0"></div>
+            <div class="field"><label>Insumos Especiales ($)</label><input id="f-opC-insumos" type="number" placeholder="0"></div>
+            <div class="field"><label>Honorarios Médicos ($)</label><input id="f-opC-honorarios" type="number" placeholder="0"></div>
+          </div>
+          <div class="form-grid" style="margin-top:10px">
+            <div class="field"><label>Hospital C</label><input id="f-opC-hospnombre" placeholder="Global Surgery..."></div>
+            <div class="field"><label>Dirección C</label><input id="f-opC-direccion" placeholder="Av. Patriotismo 579..."></div>
+          </div>
+        </div>
+      </div>
+      <div class="section-gap">
+        <div class="section-title">Estado del paciente</div>
+        <div class="substatus-grid" id="substatus-select">
+          <div class="ss-opt amarillo selected" data-val="seguimiento_activo"><div class="ss-dot amarillo"></div><div class="ss-label">Seguimiento activo</div></div>
+          <div class="ss-opt amarillo" data-val="en_valoracion"><div class="ss-dot amarillo"></div><div class="ss-label">En valoración</div></div>
+          <div class="ss-opt amarillo" data-val="aceptado_por_agendar"><div class="ss-dot amarillo"></div><div class="ss-label">Aceptado – por agendar</div></div>
+          <div class="ss-opt verde" data-val="procedimiento_agendado"><div class="ss-dot verde"></div><div class="ss-label">Procedimiento agendado</div></div>
+          <div class="ss-opt verde" data-val="pagado"><div class="ss-dot verde"></div><div class="ss-label">Pagado</div></div>
+          <div class="ss-opt verde" data-val="operado"><div class="ss-dot verde"></div><div class="ss-label">Operado</div></div>
+          <div class="ss-opt rojo" data-val="no_aceptado"><div class="ss-dot rojo"></div><div class="ss-label">No aceptado</div></div>
+          <div class="ss-opt rojo" data-val="sin_respuesta"><div class="ss-dot rojo"></div><div class="ss-label">Sin respuesta</div></div>
+        </div>
+        <div class="sem-derived amarillo" id="sem-derived-badge">
+          <div class="sem-dot-lg" style="background:var(--yellow)"></div>
+          <span>Semaforización automática: <strong>AMARILLO</strong></span>
+        </div>
+      </div>
+      <div class="section-gap">
+        <div class="section-title">Notas / Observaciones</div>
+        <div class="field"><textarea id="f-notas" placeholder="Objeciones, comentarios..."></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" id="cancel-new">Cancelar</button>
+      <button class="btn-save" id="save-btn">Guardar presupuesto</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETALLE -->
+<div class="overlay" id="overlay-detail">
+  <div class="detail-modal" id="detail-modal-content"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// MICROSOFT GRAPH / ONEDRIVE — copiado de QUAD
+// ═══════════════════════════════════════════
+const CLIENT_ID   = 'acec6a91-246d-4682-a192-b22b0fb4ea97';
+const REDIRECT_URI = window.location.href.split('?')[0].split('#')[0];
+const GRAPH_SCOPES = ['Files.ReadWrite','User.Read'];
+const FOLDER   = 'Cuivan App';
+const FILENAME = 'cuivan_data.json';
+const ONEDRIVE_URL = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent('Cuivan App')}/${encodeURIComponent('cuivan_data.json')}:/content`;
+
+let _accessToken = null;
+let _msalApp = null;
+let _tokenRenewInterval = null;
+
+function setSyncStatus(state, msg){
+  const dot=document.getElementById('sync-dot');
+  const txt=document.getElementById('sync-msg');
+  if(dot) dot.className='sync-dot '+state;
+  if(txt) txt.textContent=msg;
+}
+function showApp(){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app-content').style.display='block';
+}
+function showLogin(){
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app-content').style.display='none';
+}
+
+async function loadFromOneDrive(){
+  if(!_accessToken) return;
+  setSyncStatus('syncing','Cargando datos...');
+  try{
+    const url=`https://graph.microsoft.com/v1.0/me/drive/root:/Cuivan App/cuivan_data.json:/content`;
+    const res=await fetch(url,{headers:{Authorization:'Bearer '+_accessToken}});
+    if(res.status===404){
+      // Archivo no existe — migrar backup embebido
+      const emb=document.getElementById('embedded-data');
+      if(emb){try{const p=JSON.parse(emb.textContent);if(Array.isArray(p)&&p.length){data=p;await saveToOneDrive();setSyncStatus('ok','Datos migrados · '+data.length+' presupuestos');renderAll();return;}}catch(e){}}
+      setSyncStatus('ok','Listo para usar');renderAll();return;
+    }
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const json=await res.json();
+    if(Array.isArray(json)&&json.length>0){
+      data=json;
+      setSyncStatus('ok','Sincronizado · '+data.length+' presupuestos');
+    } else {
+      const emb=document.getElementById('embedded-data');
+      if(emb){try{const p=JSON.parse(emb.textContent);if(Array.isArray(p)&&p.length){data=p;await saveToOneDrive();setSyncStatus('ok','Datos migrados · '+data.length+' presupuestos');renderAll();return;}}catch(e){}}
+      setSyncStatus('ok','Listo para usar');
+    }
+    renderAll();
+  }catch(e){
+    setSyncStatus('error','Error: '+e.message);
+    console.error(e);
+    renderAll();
+  }
+}
+
+async function saveToOneDrive(){
+  if(!_accessToken) return;
+  setSyncStatus('syncing','Guardando...');
+  try{
+    const url=`https://graph.microsoft.com/v1.0/me/drive/root:/Cuivan App/cuivan_data.json:/content`;
+    const res=await fetch(url,{method:'PUT',headers:{Authorization:'Bearer '+_accessToken,'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(res.ok){
+      const now=new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+      setSyncStatus('ok','Guardado · '+now);
+    } else throw new Error('HTTP '+res.status);
+  }catch(e){setSyncStatus('error','Error al guardar');console.error(e);}
+}
+
+async function renewTokenSilently(){
+  if(!_msalApp) return;
+  const accounts=_msalApp.getAllAccounts();
+  if(!accounts.length) return;
+  try{
+    const tr=await _msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:accounts[0]});
+    _accessToken=tr.accessToken;
+  }catch(e){console.warn('Token renew failed:',e);}
+}
+
+// ── INIT — copiado exacto de QUAD ──
+window.addEventListener('load', async()=>{
+  await new Promise(r=>setTimeout(r,500));
+  try{
+    _msalApp = new msal.PublicClientApplication({
+      auth:{clientId:CLIENT_ID, authority:'https://login.microsoftonline.com/common', redirectUri:REDIRECT_URI},
+      cache:{cacheLocation:'localStorage', storeAuthStateInCookie:false}
+    });
+    await _msalApp.initialize();
+    const resp=await _msalApp.handleRedirectPromise().catch(e=>{console.warn(e);return null;});
+    if(resp&&resp.accessToken){
+      _accessToken=resp.accessToken;
+      const u=resp.account;
+      const userEl=document.getElementById('sync-user');
+      userEl.textContent=(u.name||u.username)+' · Cerrar sesión';
+      userEl.style.display='inline';
+      setSyncStatus('ok','Conectado — '+(u.name||u.username));
+      showApp();
+      await loadFromOneDrive();
+      if(_tokenRenewInterval) clearInterval(_tokenRenewInterval);
+      _tokenRenewInterval=setInterval(renewTokenSilently,45*60*1000);
+      return;
+    }
+    const accounts=_msalApp.getAllAccounts();
+    if(accounts.length>0){
+      _msalApp.setActiveAccount(accounts[0]);
+      try{
+        const tr=await _msalApp.acquireTokenSilent({scopes:GRAPH_SCOPES,account:accounts[0]});
+        _accessToken=tr.accessToken;
+        const u=accounts[0];
+        const userEl=document.getElementById('sync-user');
+        userEl.textContent=(u.name||u.username)+' · Cerrar sesión';
+        userEl.style.display='inline';
+        setSyncStatus('ok','Conectado — '+(u.name||u.username));
+        showApp();
+        await loadFromOneDrive();
+        if(_tokenRenewInterval) clearInterval(_tokenRenewInterval);
+        _tokenRenewInterval=setInterval(renewTokenSilently,45*60*1000);
+      }catch(e){
+        setSyncStatus('','Sesión expirada — inicia sesión');
+        showLogin();
+      }
+    } else {
+      setSyncStatus('','Desconectado');
+      showLogin();
+    }
+  }catch(e){
+    console.error('MSAL init error:',e);
+    setSyncStatus('error','Error de autenticación');
+    showLogin();
+  }
+});
+
+function msalLogin(){
+  if(!_msalApp){setSyncStatus('error','Auth no inicializado');return;}
+  _msalApp.loginRedirect({scopes:GRAPH_SCOPES, redirectUri:REDIRECT_URI});
+}
+function msalLogout(){
+  if(!_msalApp) return;
+  if(_tokenRenewInterval) clearInterval(_tokenRenewInterval);
+  _msalApp.logoutRedirect({postLogoutRedirectUri:REDIRECT_URI});
+}
+// ── Event bindings ──────────────────────────
+document.getElementById('btn-login-main').addEventListener('click', msalLogin);
+document.getElementById('sync-user').addEventListener('click',()=>{
+  if(confirm('¿Cerrar sesión?')) msalLogout();
+});
+document.getElementById('btn-sync').addEventListener('click', loadFromOneDrive);
+document.getElementById('btn-nuevo').addEventListener('click', openNewModal);
+document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
+document.getElementById('close-new').addEventListener('click', closeNewModal);
+document.getElementById('cancel-new').addEventListener('click', closeNewModal);
+document.getElementById('save-btn').addEventListener('click', savePresupuesto);
+document.getElementById('overlay-new').addEventListener('click',function(e){if(e.target===this)closeNewModal()});
+document.getElementById('overlay-detail').addEventListener('click',function(e){if(e.target===this)closeDetail()});
+document.querySelectorAll('.tab[data-tab]').forEach(el=>el.addEventListener('click',function(){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('active'));
+  this.classList.add('active');
+  document.getElementById('pane-'+this.dataset.tab).classList.add('active');
+  if(this.dataset.tab==='dashboard')renderDashboard();
+}));
+document.querySelectorAll('#chips-sem .chip').forEach(el=>el.addEventListener('click',function(){
+  document.querySelectorAll('#chips-sem .chip').forEach(c=>c.classList.remove('active'));
+  this.classList.add('active');filterSem=this.dataset.sem;renderTable();
+}));
+document.getElementById('filter-estado').addEventListener('change',function(){filterEstado=this.value;renderTable()});
+document.getElementById('filter-mes').addEventListener('change',function(){filterMes=this.value;renderTable()});
+document.getElementById('filter-año').addEventListener('change',function(){filterAnio=this.value;renderTable()});
+document.getElementById('search-input').addEventListener('input',function(){filterSearch=this.value;renderTable()});
+document.getElementById('btn-clear-filters').addEventListener('click',function(){
+  filterSem='todos';filterEstado='';filterMes='';filterAnio='';filterSearch='';
+  document.querySelectorAll('#chips-sem .chip').forEach(c=>c.classList.remove('active'));
+  document.querySelector('#chips-sem .chip[data-sem="todos"]').classList.add('active');
+  ['filter-estado','filter-mes','filter-año'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('search-input').value='';renderTable();
+});
+document.querySelectorAll('#substatus-select .ss-opt').forEach(el=>el.addEventListener('click',function(){selectSubstatus(this.dataset.val)}));
+document.getElementById('table-body').addEventListener('click',function(e){
+  const btn=e.target.closest('[data-action]');
+  const row=e.target.closest('.table-row');
+  if(btn){
+    e.stopPropagation();
+    const id=btn.dataset.id,action=btn.dataset.action;
+    if(action==='ver')openDetail(id);
+    else if(action==='edit')openEditModal(id);
+    else if(action==='del')quickDelete(id);
+    else if(action==='pdf')openPDF(id);
+  }else if(row&&!e.target.closest('[data-stop]')){
+    openDetail(row.dataset.id);
+  }
+});
+</script>
+</div><!-- /app-content -->
+
+<script id="embedded-data" type="application/json">[{"nombre": "JEAN BERNARD MOURICE GEORGES ANDRÉ HENAULT", "medico": "DR. YAIR MUÑOZ", "procedimiento": "TOMA DE BIOPSIA POR ULTRASONIDO TRANSRECTAL", "contacto": "5530589720", "vigencia": null, "canal": "WhatsApp", "notas": "ENVIADO EL 18.05.2026", "opA_nombre": "25 FRAGMENTOS", "opA_anestesia": "SEDACIÓN", "opA_hospital": "10000", "opA_insumos": "5000", "opA_honorarios": "10000", "opA_total": 25000, "opA_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX", "opA_hospnombre": "HOSPITAL CLÍNICA NÁPOLES", "opB_nombre": "", "opB_anestesia": "", "opB_hospital": "", "opB_insumos": "", "opB_honorarios": "", "opB_total": 0, "opB_direccion": "", "opB_hospnombre": "", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-05-18", "id": "mpbj3zlsdp7h", "createdAt": 1779128395264, "log": [{"date": "2026-05-18", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "JOSE SAMUEL SAGAON MARCELIANO", "medico": "DR. NEMESIO HERNANDEZ", "procedimiento": "VARICOCELE IZQUIERDO", "contacto": "5591928049", "vigencia": "2026-05-31", "canal": "WhatsApp", "notas": "", "opA_nombre": "CON LASER", "opA_anestesia": "BLOQUEO", "opA_hospital": "15000", "opA_insumos": "6000", "opA_honorarios": "14000", "opA_total": 35000, "opA_direccion": "", "opA_hospnombre": "CLÍNICA NÁPOLES Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opB_nombre": "SIN LASER", "opB_anestesia": "BLOQUEO", "opB_hospital": "12000", "opB_insumos": "5000", "opB_honorarios": "13000", "opB_total": 30000, "opB_direccion": "", "opB_hospnombre": "CLÍNICA NÁPOLES Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-05-16", "id": "mp8qvpbn0kqx", "createdAt": 1778960047091, "log": [{"date": "2026-05-16", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "MIGUEL MARTÍN CAMINO", "medico": "DR. YAIR MUÑOZ", "procedimiento": "HIDROCELE BILATERAL Y VARICOCELE", "contacto": "7721040250", "vigencia": null, "canal": "Físico", "notas": "ENTREGADO EL 13-05-2026", "opA_nombre": "HIDROCELE BILATERAL", "opA_anestesia": "BLOQUEO REGIONAL", "opA_hospital": "20000", "opA_insumos": "10000", "opA_honorarios": "25000", "opA_total": 55000, "opA_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opA_hospnombre": "HOSPITAL CLÍNICA NÁPOLES", "opB_nombre": "VARICOCELE CON LASER", "opB_anestesia": "REGIONAL", "opB_hospital": "15000", "opB_insumos": "5000", "opB_honorarios": "25000", "opB_total": 45000, "opB_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opB_hospnombre": "HOSPITAL CLÍNICA NÁPOLES", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-05-13", "id": "mp4kaq5s0otb", "createdAt": 1778707126000, "log": [{"date": "2026-05-13", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "MARIO ARMANDO CASTREJON OCAMPO", "medico": "DR. YAIR MUÑOZ", "procedimiento": "PROSTATECTOMIA RADICAL", "contacto": "", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 13.05.2026", "opA_nombre": "ROBOTICA", "opA_anestesia": "ANESTESIA GENERAL", "opA_hospital": "215000", "opA_insumos": "25000", "opA_honorarios": "75000", "opA_total": 315000, "opA_direccion": "Tlacotalpan 59, Centro Urbano Pdte. Juárez, Roma Sur, Cuauhtémoc, 06760 Cuauhtémoc, CDMX", "opA_hospnombre": "HOSPITAL ÁNGELES METROPOLITANO", "opB_nombre": "LAPAROSCOPIA", "opB_anestesia": "ANESTESIA GENERAL", "opB_hospital": "70000", "opB_insumos": "25000", "opB_honorarios": "75000", "opB_total": 170000, "opB_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-05-13", "id": "mp4j41g7b1tc", "createdAt": 1778705134423, "log": [{"date": "2026-05-13", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "ELEAZAR RANGEL BARAJAS", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CITOSCOPIA", "contacto": "5529441636", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 12.05.2026", "opA_nombre": "CITOSCOPIA", "opA_anestesia": "REGIONAL", "opA_hospital": "0", "opA_insumos": "7000", "opA_honorarios": "18000", "opA_total": 25000, "opA_direccion": "Av Observatorio 354, 16 de Septiembre, Miguel Hidalgo, 11810 Ciudad de México, CDMX", "opA_hospnombre": "HOSPITAL DIOMED", "opB_nombre": "", "opB_anestesia": "", "opB_hospital": "", "opB_insumos": "", "opB_honorarios": "", "opB_total": 0, "opB_direccion": "", "opB_hospnombre": "", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-05-12", "id": "mp33qs5t3z0s", "createdAt": 1778618855441, "log": [{"date": "2026-05-12", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "RICARDO VÁZQUEZ SANBENICO", "medico": "DR. YAIR MUÑOZ", "procedimiento": "EXPLORACIÓN TESTICULAR", "contacto": "5667799635", "vigencia": null, "canal": "Físico", "notas": "", "opA_nombre": "EXPLORACIÓN CON DESTORSIÓN TESTICULAR", "opA_anestesia": "BLOQUEO", "opA_hospital": "15000", "opA_insumos": "", "opA_honorarios": "25000", "opA_total": 40000, "opA_direccion": "Alabama 158, Colonia Nápoles,  Alcaldía Benito Juárez, 03810,  CDMX.", "opA_hospnombre": "CLÍNICA NÁPOLES", "opB_nombre": "EXPLORACIÓN CON ORQUIECTOMÍA", "opB_anestesia": "BLOQUEO", "opB_hospital": "20000", "opB_insumos": "5000", "opB_honorarios": "25000", "opB_total": 50000, "opB_direccion": "Alabama 158, Colonia Nápoles,  Alcaldía Benito Juárez, 03810,  CDMX.", "opB_hospnombre": "CLÍNICA NÁPOLES", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-05-07", "id": "mow0ne5q6tf4", "createdAt": 1778190395246, "log": [{"date": "2026-05-07", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "JOSÉ EFREN HERRERA SOLORIO", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRCUNCISIÓN", "contacto": "5530853440", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 07/05/2026", "opA_nombre": "CON LASER", "opA_anestesia": "REGIONAL", "opA_hospital": "10000", "opA_insumos": "5000", "opA_honorarios": "13000", "opA_total": 28000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "SIN LASER", "opB_anestesia": "REGIONAL", "opB_hospital": "10000", "opB_insumos": "5000", "opB_honorarios": "10000", "opB_total": 25000, "opB_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-05-07", "id": "movvupogq1nl", "createdAt": 1778182338688, "log": [{"date": "2026-05-07", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "REY MIGUEL MERLIN SEGUNDO", "medico": "DR. YAIR MUÑOZ", "procedimiento": "VASECTOMÍA", "contacto": "5620253454", "vigencia": null, "canal": "Físico", "notas": "SE ENTREGÓ EL DÍA 06.05.2026\nCUENTA CON PÓLIZA", "opA_nombre": "CON LASER", "opA_anestesia": "BLOQUEO", "opA_hospital": "10000", "opA_insumos": "5000", "opA_honorarios": "10000", "opA_total": 25000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "SIN LASER", "opB_anestesia": "BLOQUEO", "opB_hospital": "", "opB_insumos": "", "opB_honorarios": "10000", "opB_total": 10000, "opB_direccion": "Montecito 38-piso 8, Consultorio 23, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "CONSULTORIO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-05-11", "id": "mouht855kflr", "createdAt": 1778098288506, "log": [{"date": "2026-05-06", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "ENRIQUE FAVILA ARRIAGA", "medico": "DR. NEMESIO HERNANDEZ", "procedimiento": "PLASTIA INGUINAL LAPAROSCOPICA BILATERAL", "contacto": "7771063804", "vigencia": "2026-05-31", "canal": "WhatsApp", "notas": "", "opA_nombre": "MALLA PREFORMADA", "opA_anestesia": "REGIONAL", "opA_hospital": "30000", "opA_insumos": "10000", "opA_honorarios": "25000", "opA_total": 65000, "opA_direccion": "MONTECITO 38 PISO 2 COL. NAPOLES", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "MALLA SIMPLE", "opB_anestesia": "REGIONAL", "opB_hospital": "25000", "opB_insumos": "5000", "opB_honorarios": "25000", "opB_total": 55000, "opB_direccion": "MONTECITO 38 PISO 2 COL. NAPOLES", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-05-02", "id": "moombny3g8cz", "createdAt": 1777743070203, "log": [{"date": "2026-05-02", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "ALBERTO PÉREZ HERNÁNDEZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "PROSTATECTOMIA LAPAROSCOPICA Y CIRUGIA ROBOTICA", "contacto": "9231056652", "vigencia": null, "canal": "Físico", "notas": "REALIZÓ SU PAGO INICIAL DE $50,000 EL DÍA 08.05.2026", "opA_nombre": "LAPAROSCOPICA", "opA_anestesia": "REGIONAL", "opA_hospital": "70000", "opA_insumos": "10000", "opA_honorarios": "70000", "opA_total": 150000, "opA_direccion": "Montecito 38-interior 01-09, 02-01,  Nápoles, Benito Juárez, 03810  Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "ROBOT", "opB_anestesia": "REGIONAL", "opB_hospital": "200000", "opB_insumos": "20000", "opB_honorarios": "60000", "opB_total": 280000, "opB_direccion": "Tlacotalpan 59, Centro Urbano Pdte.  Juárez, Roma Sur, Cuauhtémoc,  06760 Cuauhtémoc, CDMX", "opB_hospnombre": "HOSPITAL ÁNGELES METROPOLITANO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "procedimiento_agendado", "status": "verde", "lastContact": "2026-05-11", "id": "mom6jys3i12z", "createdAt": 1777595651283, "log": [{"date": "2026-05-01", "text": "Presupuesto creado. Estado: Seguimiento activo"}, {"date": "2026-05-11", "text": "Estado: \"Seguimiento activo\" → \"Procedimiento agendado\""}]}, {"nombre": "JAVIER SÁNCHEZ JIMÉNEZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "HERNIA INGUINAL BILATERAL Y VARICOCELE", "contacto": "5522439766", "vigencia": null, "canal": "Físico", "notas": "SE ENTREGÓ EL 29.04.2026 \nCUENTA CON POLIZA", "opA_nombre": "HERNIA INGUINAL BILATERAL", "opA_anestesia": "REGIONAL", "opA_hospital": "15000", "opA_insumos": "10000", "opA_honorarios": "25000", "opA_total": 50000, "opA_direccion": "Montecito 38 piso 2 WTC, Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "VARICOCELE CON LASER", "opB_anestesia": "REGIONAL", "opB_hospital": "15000", "opB_insumos": "6000", "opB_honorarios": "14000", "opB_total": 35000, "opB_direccion": "Montecito 38 piso 2 WTC, Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-30", "id": "mom18ykjamij", "createdAt": 1777586739715, "log": [{"date": "2026-04-30", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "ARTURO MUÑOZ BAUTISTA", "medico": "DR. YAIR MUÑOZ", "procedimiento": "ORQUIECTOMÍA DERECHA", "contacto": "5619956184", "vigencia": null, "canal": "Físico", "notas": "SE ENTREGO EL DÍA 30-04-2026\nCUENTA CON POLIZA", "opA_nombre": "SIN MARCADOR  TUMORALES Y PREOPERATORIOS", "opA_anestesia": "BLOQUEO", "opA_hospital": "18000", "opA_insumos": "5000", "opA_honorarios": "20000", "opA_total": 43000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opB_nombre": "CON MARCADORES TUMORALES PREOPERATORIO", "opB_anestesia": "BLOQUEO", "opB_hospital": "18000", "opB_insumos": "12000", "opB_honorarios": "20000", "opB_total": 50000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-30", "id": "molzapqj7p0a", "createdAt": 1777583462347, "log": [{"date": "2026-04-30", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "ARTURO HERRERA ORTEGA", "medico": "DR. YAIR MUÑOZ", "procedimiento": "PROSTATECTOMIA LAPAROSCOPICA Y CIRUGIA ROBOTICA", "contacto": "", "vigencia": null, "canal": "Físico", "notas": "ENVIADO A DR. YAIR EL DÍA 30.04.2026", "opA_nombre": "LAPAROSCOPICA", "opA_anestesia": "REGIONAL", "opA_hospital": "70000", "opA_insumos": "10000", "opA_honorarios": "70000", "opA_total": 150000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "ROBOT", "opB_anestesia": "REGIONAL", "opB_hospital": "200000", "opB_insumos": "10000", "opB_honorarios": "70000", "opB_total": 280000, "opB_direccion": "Tlacotalpan 59, Centro Urbano Pdte. Juárez, Roma Sur, Cuauhtémoc, 06760 Cuauhtémoc, CDMX", "opB_hospnombre": "HOSPITAL ÁNGELES METROPOLITANO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-30", "id": "moluulqq3rum", "createdAt": 1777575992210, "log": [{"date": "2026-04-30", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "JESÚS RICO PADILLA", "medico": "DR. YAIR MUÑOZ", "procedimiento": "TOMA DE BIOPSIA POR ULTRASONIDO TRANSRECTAL", "contacto": "5611746009", "vigencia": null, "canal": "Físico", "notas": "PAGADO CON TC EL DÍA 30.04.2026\nSE OPERA EL 01.04.2026", "opA_nombre": "20 FRAGMENTOS", "opA_anestesia": "SEDACIÓN", "opA_hospital": "10000", "opA_insumos": "5000", "opA_honorarios": "10000", "opA_total": 25000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opB_nombre": "25 FRAGMENTOS", "opB_anestesia": "SEDACIÓN", "opB_hospital": "10000", "opB_insumos": "5000", "opB_honorarios": "15000", "opB_total": 30000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "pagado", "status": "verde", "lastContact": "2026-04-30", "id": "moltlak5i3ey", "createdAt": 1777573878197, "log": [{"date": "2026-04-30", "text": "Presupuesto creado. Estado: Seguimiento activo"}, {"date": "2026-04-30", "text": "Estado: \"Seguimiento activo\" → \"Pagado\""}]}, {"nombre": "RICARDO SEGURA MOLINA", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRUGÍA DE PROSTATA", "contacto": "", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 18-03-2026, EL PACIENTE MANIFIESTA QUE NO HA PODIDO REVISAR AÚN EL PRESUPUESTO", "opA_nombre": "HOLEP", "opA_anestesia": "", "opA_hospital": "50000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 50000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opB_nombre": "RTUP", "opB_anestesia": "", "opB_hospital": "40000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 40000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokmbzai9n2l", "createdAt": 1777501220202, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "FERNANDO ALBERTO GRANADOS DELGADO", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRCUNCISIÓN", "contacto": "", "vigencia": null, "canal": "Físico", "notas": "NO ACEPTO TOMAR LA LLAMADA", "opA_nombre": "CON LASER", "opA_anestesia": "", "opA_hospital": "30000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 30000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opB_nombre": "SIN LASER", "opB_anestesia": "", "opB_hospital": "25000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 25000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "no_aceptado", "status": "rojo", "lastContact": "2026-04-29", "id": "mokm8feg0wk0", "createdAt": 1777501054456, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: No aceptado"}]}, {"nombre": "EDUARDO MORALES FLORES", "medico": "DR. YAIR MUÑOZ", "procedimiento": "VASECTOMÍA", "contacto": "", "vigencia": null, "canal": "Físico", "notas": "SIN DATOS DE CONTACTO", "opA_nombre": "CON LASER", "opA_anestesia": "", "opA_hospital": "25000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 25000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "SIN LASER", "opB_anestesia": "", "opB_hospital": "15000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 15000, "opB_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "sin_respuesta", "status": "rojo", "lastContact": "2026-04-29", "id": "mokm4t7fqqng", "createdAt": 1777500885723, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Sin respuesta"}]}, {"nombre": "JOSE ALFREDO GALICIA AVILA", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRCUNCISIÓN", "contacto": "5537977450", "vigencia": null, "canal": "Físico", "notas": "CONTACTADO POR ÚLTIMA VEZ EL 17-03-2026", "opA_nombre": "CON LASER", "opA_anestesia": "", "opA_hospital": "30000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 30000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opB_nombre": "SIN LASER", "opB_anestesia": "", "opB_hospital": "25000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 25000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "sin_respuesta", "status": "rojo", "lastContact": "2026-04-29", "id": "mokm0jb7yni5", "createdAt": 1777500686275, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Sin respuesta"}]}, {"nombre": "EFRAIN CASTILLO TORRES", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRUGÍA DE PROSTATA", "contacto": "5544906968", "vigencia": null, "canal": "Físico", "notas": "NO ACEPTO TOMAR LA LLAMADA", "opA_nombre": "HOLEP", "opA_anestesia": "", "opA_hospital": "55000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 55000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "RTUP", "opB_anestesia": "", "opB_hospital": "45000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 45000, "opB_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "no_aceptado", "status": "rojo", "lastContact": "2026-04-29", "id": "moklwb64cody", "createdAt": 1777500489100, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: No aceptado"}]}, {"nombre": "ESDRAS VICTOR HERNANDEZ HERNANDEZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "COLECISTECTOMIA LAPAROSCÓPICA", "contacto": "5524185547", "vigencia": null, "canal": "Físico", "notas": "PACIENTE DE VITALIFE, YA NO ENTRA LLAMADA AL NÚMERO INDICADO", "opA_nombre": "CON BIOPSIA", "opA_anestesia": "", "opA_hospital": "60000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 60000, "opA_direccion": "Doctores, Roma Nte., Cuauhtémoc, 78230 San Luis Potosi y Querétaro, CDMX", "opA_hospnombre": "AV. CUAUHTEMOC 198", "opB_nombre": "SIN BIOPSIA", "opB_anestesia": "", "opB_hospital": "55000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 55000, "opB_direccion": "Doctores, Roma Nte., Cuauhtémoc, 78230 San Luis Potosi y Querétaro, CDMX", "opB_hospnombre": "AV. CUAUHTEMOC 198", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "sin_respuesta", "status": "rojo", "lastContact": "2026-04-29", "id": "mokloribf5g7", "createdAt": 1777500137027, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Sin respuesta"}]}, {"nombre": "HORACIO REYNA GUERRA", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRUGÍA DE PROSTATA", "contacto": "8341440012", "vigencia": null, "canal": "Físico", "notas": "ESTA INTERESADO PERO SE ENCUENTRA ESTABLE, LLAMAR EN 2  MESES", "opA_nombre": "HOLEP", "opA_anestesia": "", "opA_hospital": "55000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 55000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opB_nombre": "RTUP", "opB_anestesia": "", "opB_hospital": "45000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 45000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "moklgisbjn6a", "createdAt": 1777499752475, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "WALTER GUIJARRO", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRUGÍA DE PROSTATA", "contacto": "7224279648", "vigencia": null, "canal": "Físico", "notas": "SE LE LLAMO EL DÍA 12-03-2026, NO ACEPTO TOMAR LA LLAMADA", "opA_nombre": "HOLEP", "opA_anestesia": "", "opA_hospital": "55000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 55000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opB_nombre": "RTUP", "opB_anestesia": "", "opB_hospital": "45000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 45000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "no_aceptado", "status": "rojo", "lastContact": "2026-04-29", "id": "moklbixlfny3", "createdAt": 1777499519385, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: No aceptado"}]}, {"nombre": "JESÚS HUANTE", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRUGÍA DE PROSTATA", "contacto": "5591856827", "vigencia": null, "canal": "Físico", "notas": "", "opA_nombre": "HOLEP", "opA_anestesia": "", "opA_hospital": "65000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 65000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "RTUP", "opB_anestesia": "", "opB_hospital": "55000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 55000, "opB_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "procedimiento_agendado", "status": "verde", "lastContact": "2026-04-29", "id": "mokl49tnqach", "createdAt": 1777499180987, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}, {"date": "2026-04-29", "text": "Estado: \"Seguimiento activo\" → \"Aceptado – por agendar\""}, {"date": "2026-04-29", "text": "Estado: \"Aceptado – por agendar\" → \"Procedimiento agendado\""}]}, {"nombre": "IGNACIO SOTO PÉREZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CISTOSCOPIA CON LASER", "contacto": "7861259624", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 14-03-2026", "opA_nombre": "", "opA_anestesia": "", "opA_hospital": "45000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 45000, "opA_direccion": "", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "", "opB_anestesia": "", "opB_hospital": "", "opB_insumos": "", "opB_honorarios": "", "opB_total": 0, "opB_direccion": "", "opB_hospnombre": "", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokkvd2tjoyz", "createdAt": 1777498765301, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "RAFAEL VERA RODRÍGUEZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "HIDROCELE BILATERAL", "contacto": "5553769284", "vigencia": null, "canal": "Físico", "notas": "ENVIADO 14-03-2026", "opA_nombre": "", "opA_anestesia": "", "opA_hospital": "60000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 60000, "opA_direccion": "03810, Nápoles, Benito Juárez, 03810 CDMX", "opA_hospnombre": "HOSPITAL INFANTIL PRIVADO", "opB_nombre": "", "opB_anestesia": "", "opB_hospital": "", "opB_insumos": "", "opB_honorarios": "", "opB_total": 0, "opB_direccion": "", "opB_hospnombre": "", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokkljatt8s5", "createdAt": 1777498306805, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "CRISTOPHER BARRUETA ÁLVAREZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CISTOSCOPIA CON LASER Y HERNIA INGUINAL DE UN LADO", "contacto": "5536700912", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 12-03-2026", "opA_nombre": "", "opA_anestesia": "", "opA_hospital": "40000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 40000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "", "opB_anestesia": "", "opB_hospital": "", "opB_insumos": "", "opB_honorarios": "", "opB_total": 0, "opB_direccion": "", "opB_hospnombre": "", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokkfr4rml3u", "createdAt": 1777498037019, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "CRISTOPHER BARRUETA ÁLVAREZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "HERNIA INGUINAL", "contacto": "5536700912", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 12-03-2026", "opA_nombre": "2 LADOS", "opA_anestesia": "", "opA_hospital": "70000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 70000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "1 LADO", "opB_anestesia": "", "opB_hospital": "60000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 60000, "opB_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokk8jpoyakp", "createdAt": 1777497700812, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "ARIEH ABECASSIS GUEZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "VARICOCELE BILATERAL", "contacto": "3228547752", "vigencia": null, "canal": "Físico", "notas": "", "opA_nombre": "2 LADOS", "opA_anestesia": "", "opA_hospital": "40000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 40000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "1 LADO", "opB_anestesia": "", "opB_hospital": "35000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 35000, "opB_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokjyeoruuiv", "createdAt": 1777497227739, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "ARIEH ABECASSIS GUEZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRUGÍA DE PROSTATA", "contacto": "3228547752", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 12-03-2026", "opA_nombre": "HOLEP", "opA_anestesia": "", "opA_hospital": "60000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 60000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "RTUP", "opB_anestesia": "", "opB_hospital": "55000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 55000, "opB_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokjv9n94yjs", "createdAt": 1777497081237, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "ALEJANDRO CAZARES LUJAN", "medico": "DR. YAIR MUÑOZ", "procedimiento": "VARICOCELE", "contacto": "5538945325", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 11-03-2026", "opA_nombre": "CON LASER", "opA_anestesia": "", "opA_hospital": "35000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 35000, "opA_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opA_hospnombre": "CLÍNICA NÁPOLES", "opB_nombre": "SIN LASER", "opB_anestesia": "", "opB_hospital": "30000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 30000, "opB_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opB_hospnombre": "CLÍNICA NÁPOLES", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokjle93qo7z", "createdAt": 1777496620647, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "JOSÉ ROBERTO DÍAZ PADILLA", "medico": "DR. YAIR MUÑOZ", "procedimiento": "VARICOCELE", "contacto": "5549951395", "vigencia": null, "canal": "Físico", "notas": "ENVIADO 10-03-2026", "opA_nombre": "CON LASER", "opA_anestesia": "", "opA_hospital": "35000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 35000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opB_nombre": "SIN LASER", "opB_anestesia": "", "opB_hospital": "30000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 30000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokjahfkijcx", "createdAt": 1777496111552, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "FERNANDO ORTÍZ ESPINAL", "medico": "DR. YAIR MUÑOZ", "procedimiento": "HERNIA INGUINAL", "contacto": "5544574883", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 07-03-2026", "opA_nombre": "", "opA_anestesia": "", "opA_hospital": "", "opA_insumos": "", "opA_honorarios": "", "opA_total": 0, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "2 LADOS", "opB_anestesia": "", "opB_hospital": "65000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 65000, "opB_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "1 LADO", "opC_anestesia": "", "opC_hospital": "60000", "opC_insumos": "", "opC_honorarios": "", "opC_total": 60000, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokinsnbtlmx", "createdAt": 1777495052999, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "DANIEL RAMÍREZ HINOJOSA", "medico": "DR- YAIR MUÑOZ", "procedimiento": "VARICOCELE", "contacto": "5519641958", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 07-03-2026", "opA_nombre": "CON LASER", "opA_anestesia": "", "opA_hospital": "35000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 35000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opB_nombre": "SIN LASER", "opB_anestesia": "", "opB_hospital": "30000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 30000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokiha4zs7ae", "createdAt": 1777494749075, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "DANIEL RAMÍREZ HINOJOSA", "medico": "DR. YAIR MUÑOZ", "procedimiento": "VASECTOMÍA", "contacto": "5519641958", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 07-03-2026", "opA_nombre": "CON LASER", "opA_anestesia": "", "opA_hospital": "25000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 25000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opB_nombre": "SIN LASER", "opB_anestesia": "", "opB_hospital": "15000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 15000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "mokie11klo0k", "createdAt": 1777494597320, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "DANIEL RAMÍREZ HINOJOSA", "medico": "DR. YAIR MUÑOZ", "procedimiento": "HERNIA INGUINAL IZQUIERDA", "contacto": "5519641958", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 07-03-2026", "opA_nombre": "CON MALLA", "opA_anestesia": "", "opA_hospital": "70000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 70000, "opA_direccion": "Doctores, Roma Nte., Cuauhtémoc, 78230 San Luis Potosi y Querétaro, CDMX", "opA_hospnombre": "Av. Cuauhtémoc 198", "opB_nombre": "SIN MALLA", "opB_anestesia": "", "opB_hospital": "60000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 60000, "opB_direccion": "Doctores, Roma Nte., Cuauhtémoc, 78230 San Luis Potosi y Querétaro, CDMX", "opB_hospnombre": "Av. Cuauhtémoc 198", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-29", "id": "moki9edb5y5v", "createdAt": 1777494381311, "log": [{"date": "2026-04-29", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "SALVADOR GIL ARRIAGA", "medico": "DR. YAIR MUÑOZ", "procedimiento": "VARICOCELE", "contacto": "5512242404", "vigencia": null, "canal": "Físico", "notas": "", "opA_nombre": "CON LASER", "opA_anestesia": "BLOQUEO", "opA_hospital": "15000", "opA_insumos": "11000", "opA_honorarios": "14000", "opA_total": 40000, "opA_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opA_hospnombre": "CLÍNICA NÁPOLES", "opB_nombre": "SIN LASER", "opB_anestesia": "BLOQUEO", "opB_hospital": "12000", "opB_insumos": "10000", "opB_honorarios": "13000", "opB_total": 35000, "opB_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opB_hospnombre": "CLÍNICA NÁPOLES", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-28", "id": "moj63vm6u3fe", "createdAt": 1777413502158, "log": [{"date": "2026-04-28", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "CARLOS ADRIAN CHÁVEZ TOVAR", "medico": "DR. YAIR MUÑOZ", "procedimiento": "FRENILECTOMÍA Y CIRCUNCISIÓN", "contacto": "5516791104", "vigencia": null, "canal": "Físico", "notas": "ENTREGADO EL 27-04-2026", "opA_nombre": "FRENILECTOMÍA", "opA_anestesia": "REGIONAL", "opA_hospital": "0", "opA_insumos": "3000", "opA_honorarios": "12000", "opA_total": 15000, "opA_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opA_hospnombre": "CLÍNICA NÁPOLES", "opB_nombre": "CIRCUNCISIÓN", "opB_anestesia": "REGIONAL", "opB_hospital": "10000", "opB_insumos": "5000", "opB_honorarios": "20000", "opB_total": 35000, "opB_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opB_hospnombre": "CLÍNICA NÁPOLES", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-30", "id": "mohp688pofua", "createdAt": 1777324592185, "log": [{"date": "2026-04-27", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "CARLOS EDMUNDO TORRES JAIME", "medico": "DR. YAIR MUÑOZ", "procedimiento": "QUISTE DE EPIDIDIMO Y VARICOCELE BILATERAL", "contacto": "5619929440", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 06-03-2026", "opA_nombre": "", "opA_anestesia": "", "opA_hospital": "30000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 30000, "opA_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opA_hospnombre": "CLINICA NÁPOLES", "opB_nombre": "", "opB_anestesia": "", "opB_hospital": "", "opB_insumos": "", "opB_honorarios": "", "opB_total": 0, "opB_direccion": "Alabama 158, Colonia Nápoles, Alcaldía Benito Juárez, 03810, CDMX.", "opB_hospnombre": "CLINICA NÁPOLES", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "procedimiento_agendado", "status": "verde", "lastContact": "2026-04-29", "id": "mohllv6m3oxa", "createdAt": 1777318603294, "log": [{"date": "2026-04-27", "text": "Presupuesto creado. Estado: Seguimiento activo"}, {"date": "2026-04-29", "text": "Estado: \"Seguimiento activo\" → \"Procedimiento agendado\""}]}, {"nombre": "JORGE OTON ALCANTARA RODRIGUEZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRUGÍA DE PROSTATA", "contacto": "5518393555", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 11-02-2026", "opA_nombre": "HOLEP", "opA_anestesia": "", "opA_hospital": "65000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 65000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opB_nombre": "RTUP", "opB_anestesia": "", "opB_hospital": "55000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 55000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLOGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-27", "id": "mohkykiprh70", "createdAt": 1777317516385, "log": [{"date": "2026-04-27", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "ROBERTO PULIDO RAMIREZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "VARICOCELE", "contacto": "", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 03-03-2026", "opA_nombre": "CON MICROOSCOPIO", "opA_anestesia": "", "opA_hospital": "35000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 35000, "opA_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opA_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opB_nombre": "SIN MICROOSCOPIO", "opB_anestesia": "", "opB_hospital": "30000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 30000, "opB_direccion": "Av. Patriotismo 579, Cd. de los Deportes, Benito Juárez, 03710 Ciudad de México, CDMX", "opB_hospnombre": "CENTRO UROLÓGICO PATRIOTISMO", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-27", "id": "mohkqm3aew7g", "createdAt": 1777317145175, "log": [{"date": "2026-04-27", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}, {"nombre": "SERGIO MUNGUIA QUIROZ", "medico": "DR. YAIR MUÑOZ", "procedimiento": "CIRUGÍA DE PROSTATA", "contacto": "5513196714", "vigencia": null, "canal": "Físico", "notas": "ENVIADO EL 02-03-2026", "opA_nombre": "HOLEP", "opA_anestesia": "", "opA_hospital": "60000", "opA_insumos": "", "opA_honorarios": "", "opA_total": 60000, "opA_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opA_hospnombre": "GLOBAL SURGERY", "opB_nombre": "RTUP", "opB_anestesia": "", "opB_hospital": "55000", "opB_insumos": "", "opB_honorarios": "", "opB_total": 55000, "opB_direccion": "Montecito 38-interior 01-09, 02-01, Nápoles, Benito Juárez, 03810 Ciudad de México, CDMX", "opB_hospnombre": "GLOBAL SURGERY", "opC_nombre": "", "opC_anestesia": "", "opC_hospital": "", "opC_insumos": "", "opC_honorarios": "", "opC_total": 0, "opC_direccion": "", "opC_hospnombre": "", "substatus": "seguimiento_activo", "status": "amarillo", "lastContact": "2026-04-27", "id": "mohkltn3dqc7", "createdAt": 1777316921679, "log": [{"date": "2026-04-27", "text": "Presupuesto creado. Estado: Seguimiento activo"}]}]</script>
+</body>
+</html>
